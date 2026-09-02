@@ -3,7 +3,7 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-from users.views import CreateUserView
+from users.views import CreateUserView, ManageUserView
 
 app_name = "users"
 
@@ -13,4 +13,5 @@ urlpatterns = [
     # Endpoint to get a new Access token by providing a valid Refresh token
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("", CreateUserView.as_view(), name="create"),
+    path("me/", ManageUserView.as_view(), name="manage"),
 ]
