@@ -1,6 +1,7 @@
 from rest_framework import viewsets
 from books.models import Book
 from books.serializers import BookSerializer
+from books.permissions import IsAdminOrReadOnly
 
 class BookViewSet(viewsets.ModelViewSet):
     """
@@ -13,3 +14,6 @@ class BookViewSet(viewsets.ModelViewSet):
     
     # serializer_class defines how the data is formatted (to JSON and back)
     serializer_class = BookSerializer
+
+    # Assign the custom permission class
+    permission_classes = (IsAdminOrReadOnly,)
