@@ -1,4 +1,8 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db import transaction
 from borrowings.models import Borrowing
 from borrowings.serializers import BorrowingSerializer
 
@@ -46,3 +50,39 @@ class BorrowingViewSet(viewsets.ModelViewSet):
         """
         # self.request.user contains the currently authenticated user
         serializer.save(user=self.request.user)
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        url_path="return",
+    )
+    def return_book(self, request, pk=None):
+        """
+        Custom action to return a borrowed book.
+        Sets actual_return_date to today and increases book inventory by 1.
+        """
+        # Retrieve the specific borrowing instance using its ID (pk)
+        borrowing = self.get_object()
+
+        # Check if the book has already been returned
+        if borrowing.actual_return_date is not None:
+            return Response(
+                {"detail": "This book has already been returned."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Use atomic transaction to ensure data integrity
+        with transaction.atomic():
+            # Set the return date to today
+            borrowing.actual_return_date = timezone.now().date()
+            borrowing.save()
+
+            # Increase the book's inventory by 1
+            book = borrowing.book
+            book.inventory += 1
+            book.save()
+
+        # Return a success message
+        return Response(
+            {"detail": "Book returned successfully!"}, status=status.HTTP_200_OK
+        )
