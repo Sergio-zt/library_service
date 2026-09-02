@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -131,3 +132,20 @@ MAILERS = {
 }
 
 AUTH_USER_MODEL = "users.User"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+}
+
+# Optional: Configuration for SimpleJWT (e.g., how long tokens live)
+
+SIMPLE_JWT = {
+    # Access token is valid for 1 hour
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    # Refresh token is valid for 1 day
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # Define how the token should look in the HTTP header (e.g., "Bearer <token>")
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
