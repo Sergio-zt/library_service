@@ -13,6 +13,7 @@ class BorrowingViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = BorrowingSerializer
+    queryset = Borrowing.objects.all()
     # Only authenticated users can interact with borrowings
     permission_classes = (permissions.IsAuthenticated,)
 
