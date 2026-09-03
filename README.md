@@ -49,3 +49,10 @@ An online management system for book borrowings, built with Django and Django RE
     ```bash
     python manage.py runserver
     ```
+
+## Project Management (Trello)
+The development process, task tracking, and Agile workflow for this project were managed using Trello.
+
+* **View the Trello Board:** [Click here to view](https://trello.com/invite/b/6a95a584e3ed3cea01dc7763/ATTI3887a5bffb0542af50bea2246f2689f13906E951/library-service-project)
+
+![Trello Board](trello_board.png)
