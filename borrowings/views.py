@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.db import transaction
 from borrowings.models import Borrowing
 from borrowings.serializers import BorrowingSerializer
+from borrowings.tasks import send_telegram_notification
 
 
 class BorrowingViewSet(viewsets.ModelViewSet):
@@ -87,3 +88,18 @@ class BorrowingViewSet(viewsets.ModelViewSet):
         return Response(
             {"detail": "Book returned successfully!"}, status=status.HTTP_200_OK
         )
+
+    def perform_create(self, serializer):
+        # 1. Save borrowing to DB
+        borrowing = serializer.save(user=self.request.user)
+
+        # 2. Form text
+        message = (
+            f"📚 New Borrowing Created!\n\n"
+            f"User: {borrowing.user.email}\n"
+            f"Book: {borrowing.book.title}\n"
+            f"Expected Return: {borrowing.expected_return_date}"
+        )
+
+        # 3. Sent it to Celery.
+        send_telegram_notification.delay(message)
