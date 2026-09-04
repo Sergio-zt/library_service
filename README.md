@@ -17,6 +17,9 @@ An online management system for book borrowings, built with Django and Django RE
 * Django REST Framework (DRF)
 * SimpleJWT (Authentication)
 * drf-spectacular (Swagger Documentation)
+* **Celery & Redis** (Background tasks & Message broker)
+* **Stripe API** (Payment processing)
+* **Telegram API** (Asynchronous notifications)
 
 ## Local Setup & Installation
 
@@ -49,6 +52,17 @@ An online management system for book borrowings, built with Django and Django RE
     ```bash
     python manage.py runserver
     ```
+
+7. **Start Redis via Docker:**
+    ```bash
+    docker compose up -d
+    ```
+    **In new terminal run Celery:**
+    # For Windows:
+    celery -A library_service worker -l INFO --pool=solo
+
+    # For Linux / macOS:
+    celery -A library_service worker -l INFO
 
 ## Project Management (Trello)
 The development process, task tracking, and Agile workflow for this project were managed using Trello.
