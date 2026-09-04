@@ -3,9 +3,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db import transaction
-from borrowings.models import Borrowing
+from borrowings.models import Borrowing, Payment
 from borrowings.serializers import BorrowingSerializer
 from borrowings.tasks import send_telegram_notification
+from borrowings.stripe_helper import create_stripe_session
+from rest_framework.views import APIView
 
 
 class BorrowingViewSet(viewsets.ModelViewSet):
@@ -51,7 +53,44 @@ class BorrowingViewSet(viewsets.ModelViewSet):
         Automatically assign the logged-in user to the borrowing.
         """
         # self.request.user contains the currently authenticated user
-        serializer.save(user=self.request.user)
+        borrowing = serializer.save(user=self.request.user)
+
+        # Calculate sum for pay:
+        days = (borrowing.expected_return_date - borrowing.borrow_date).days
+        if days <= 0:
+            days = 1
+
+        total_price = days * borrowing.book.daily_fee
+
+        # Create record about payment with status PENDING
+        payment = Payment.objects.create(
+            borrowing=borrowing,
+            money_to_pay=total_price,
+            status=Payment.StatusChoices.PENDING,
+            type=Payment.TypeChoices.PAYMENT,
+        )
+
+        # Generate link for payment in Stripe
+        try:
+            stripe_url = create_stripe_session(payment, self.request)
+        except Exception as e:
+            print(f"Error creating Stripe session: {e}")
+            stripe_url = None
+
+        # Form text
+        message = (
+            f"📚 New Borrowing Created!\n\n"
+            f"User: {borrowing.user.email}\n"
+            f"Book: {borrowing.book.title}\n"
+            f"Expected Return: {borrowing.expected_return_date}\n"
+            f"Total Price: ${total_price}\n"
+        )
+
+        if stripe_url:
+            message += f"💳 Pay here: {stripe_url}"
+
+        # Send it to Celery.
+        send_telegram_notification.delay(message)
 
     @action(
         detail=True,
@@ -89,17 +128,31 @@ class BorrowingViewSet(viewsets.ModelViewSet):
             {"detail": "Book returned successfully!"}, status=status.HTTP_200_OK
         )
 
-    def perform_create(self, serializer):
-        # 1. Save borrowing to DB
-        borrowing = serializer.save(user=self.request.user)
 
-        # 2. Form text
-        message = (
-            f"📚 New Borrowing Created!\n\n"
-            f"User: {borrowing.user.email}\n"
-            f"Book: {borrowing.book.title}\n"
-            f"Expected Return: {borrowing.expected_return_date}"
+class PaymentSuccessView(APIView):
+    def get(self, request):
+        session_id = request.GET.get("session_id")
+        if session_id:
+            try:
+                payment = Payment.objects.get(session_id=session_id)
+                payment.status = Payment.StatusChoices.PAID
+                payment.save()
+                return Response(
+                    {"detail": "Payment successful! Thank you."},
+                    status=status.HTTP_200_OK,
+                )
+            except Payment.DoesNotExist:
+                return Response(
+                    {"detail": "Payment not found."}, status=status.HTTP_404_NOT_FOUND
+                )
+        return Response(
+            {"detail": "Invalid session ID."}, status=status.HTTP_400_BAD_REQUEST
         )
 
-        # 3. Sent it to Celery.
-        send_telegram_notification.delay(message)
+
+class PaymentCancelView(APIView):
+    def get(self, request):
+        return Response(
+            {"detail": "Payment was cancelled. You can try again later."},
+            status=status.HTTP_200_OK,
+        )

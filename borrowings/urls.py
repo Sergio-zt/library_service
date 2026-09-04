@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import BorrowingViewSet
+from borrowings.views import BorrowingViewSet, PaymentSuccessView, PaymentCancelView
 
 # Create a router instance
 router = DefaultRouter()
@@ -15,4 +15,6 @@ app_name = "borrowings"
 urlpatterns = [
     # Include all generated URLs from the router
     path("", include(router.urls)),
+    path("payments/success/", PaymentSuccessView.as_view(), name="payment-success"),
+    path("payments/cancel/", PaymentCancelView.as_view(), name="payment-cancel"),
 ]
