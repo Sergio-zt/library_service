@@ -3,11 +3,17 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db import transaction
-from borrowings.models import Borrowing, Payment
+from borrowings.models import Borrowing
 from borrowings.serializers import BorrowingSerializer
 from borrowings.tasks import send_telegram_notification
-from borrowings.stripe_helper import create_stripe_session
-from rest_framework.views import APIView
+from payments.stripe_helper import create_stripe_session
+from payments.models import Payment
+import logging
+import stripe
+from django.db import transaction
+from rest_framework.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class BorrowingViewSet(viewsets.ModelViewSet):
@@ -52,32 +58,43 @@ class BorrowingViewSet(viewsets.ModelViewSet):
         """
         Automatically assign the logged-in user to the borrowing.
         """
-        # self.request.user contains the currently authenticated user
-        borrowing = serializer.save(user=self.request.user)
+        with transaction.atomic():
+            # self.request.user contains the currently authenticated user
+            borrowing = serializer.save(user=self.request.user)
 
-        # Calculate sum for pay:
-        days = (borrowing.expected_return_date - borrowing.borrow_date).days
-        if days <= 0:
-            days = 1
+            # Calculate sum for pay:
+            days = (borrowing.expected_return_date - borrowing.borrow_date).days
+            if days <= 0:
+                days = 1
 
-        total_price = days * borrowing.book.daily_fee
+            total_price = days * borrowing.book.daily_fee
 
-        # Create record about payment with status PENDING
-        payment = Payment.objects.create(
-            borrowing=borrowing,
-            money_to_pay=total_price,
-            status=Payment.StatusChoices.PENDING,
-            type=Payment.TypeChoices.PAYMENT,
-        )
+            # Create record about payment with status PENDING
+            payment = Payment.objects.create(
+                borrowing=borrowing,
+                money_to_pay=total_price,
+                status=Payment.StatusChoices.PENDING,
+                type=Payment.TypeChoices.PAYMENT,
+            )
 
-        # Generate link for payment in Stripe
-        try:
-            stripe_url = create_stripe_session(payment, self.request)
-        except Exception as e:
-            print(f"Error creating Stripe session: {e}")
-            stripe_url = None
+            # Generate link for payment in Stripe
+            try:
+                stripe_url = create_stripe_session(payment, self.request)
+            except stripe.error.StripeError as e:
+                # Cach Stripe errors
+                logger.error(f"Stripe API error: {str(e)}")
+                # Rise DRF error
+                raise ValidationError(
+                    {"payment_error": "Payment service is currently unavailable. Please try again later."}
+                )
+            except Exception as e:
+                # Unexpected errors
+                logger.error(f"Unexpected error during payment creation: {str(e)}")
+                raise ValidationError(
+                    {"error": "An unexpected error occurred while processing your request."}
+                )
 
-        # Form text
+        # If we are here, form text for telegram
         message = (
             f"📚 New Borrowing Created!\n\n"
             f"User: {borrowing.user.email}\n"
@@ -126,33 +143,4 @@ class BorrowingViewSet(viewsets.ModelViewSet):
         # Return a success message
         return Response(
             {"detail": "Book returned successfully!"}, status=status.HTTP_200_OK
-        )
-
-
-class PaymentSuccessView(APIView):
-    def get(self, request):
-        session_id = request.GET.get("session_id")
-        if session_id:
-            try:
-                payment = Payment.objects.get(session_id=session_id)
-                payment.status = Payment.StatusChoices.PAID
-                payment.save()
-                return Response(
-                    {"detail": "Payment successful! Thank you."},
-                    status=status.HTTP_200_OK,
-                )
-            except Payment.DoesNotExist:
-                return Response(
-                    {"detail": "Payment not found."}, status=status.HTTP_404_NOT_FOUND
-                )
-        return Response(
-            {"detail": "Invalid session ID."}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-
-class PaymentCancelView(APIView):
-    def get(self, request):
-        return Response(
-            {"detail": "Payment was cancelled. You can try again later."},
-            status=status.HTTP_200_OK,
         )

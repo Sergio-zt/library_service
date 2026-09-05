@@ -14,10 +14,10 @@ def create_stripe_session(payment, request):
     unit_amount = int(payment.money_to_pay * 100)
 
     success_url = (
-        request.build_absolute_uri(reverse("borrowings:payment-success"))
+        request.build_absolute_uri(reverse("payments:payment-success"))
         + "?session_id={CHECKOUT_SESSION_ID}"
     )
-    cancel_url = request.build_absolute_uri(reverse("borrowings:payment-cancel"))
+    cancel_url = request.build_absolute_uri(reverse("payments:payment-cancel"))
 
     try:
         session = stripe.checkout.Session.create(
